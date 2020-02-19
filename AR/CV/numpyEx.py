@@ -1,4 +1,5 @@
 import numpy as np
+import cv2
 
 # 1. Create a vector of 10 floats (zeros)
 def e1():
@@ -67,7 +68,7 @@ def e13():
 
 # 14. Create a 5x5 matrix of random values and subtract the average of each row to each row
 def e14():
-    np.random.seed(101)
+    np.random.seed(123)
     arr = np.random.random_sample((5,5))
     for i in range(5):
         print("Mean{}: {}".format(i, np.mean(arr[i])))
@@ -75,13 +76,35 @@ def e14():
 
 # 15. Create an array of 5x5 random values and return the value that is closer to 0.5
 def e15():
-    np.random.seed(101)
-    arr = np.random.random_sample((5,5))
+    np.random.seed(123)
+    arr = np.random.random_sample((5, 5))
     arr = arr.flatten()
+    index = (np.abs(arr - 0.5)).argmin()
+    return arr[index]
     
 # 16. Make a 3x3 matrix of random numbers from 0 to 10 and count how many of them are > 5
+def e16():
+    np.random.seed(123)
+    arr = np.random.randint(0, 11, (3, 3))
+    return arr[arr > 5]
+
 # 17. Create a horizontal gradient image of 64x64 that goes from black to white
+def e17():
+    img = np.zeros((64, 64), np.uint8)
+    img[:] = np.arange(0, 255, 255/64)
+    cv2.imshow('Degradado b/n', img)
+    cv2.waitKey(0)
+    
 # 18. Create a vertical gradient image of 64x64 that goes from black to white
+def e18():
+    img = np.zeros((64, 64), np.float)
+    c = np.arange(0.0, 64.0)
+    print(c)
+    c = c/64.0
+    print(c)
+    img[0, :] = c
+    cv2.imshow('Degradado b/n', img)
+    cv2.waitKey(0)
 # 19. Create a 3-component white image of 64x64 pixels and set the blue component to zero
 # (the result should be yellow)
 # 20. Create a 3-component white image of 64x64 pixels, set the blue component of the
@@ -91,4 +114,5 @@ def e15():
 # 22. Open an image and insert black vertical scan lines at 50%
 # 23. Open an image, convert it to float64, normalize it, darken it 50%, and show it
 
-print(e14())
+#print(e17())
+e18()

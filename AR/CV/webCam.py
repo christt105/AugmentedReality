@@ -5,6 +5,7 @@ dev = cv2.VideoCapture(0)
 
 while True:
     ret, frame = dev.read()
+    dog = cv2.imread('perrete.png')
     
     gray = cv2.cvtColor(frame, 1)
     gray = cv2.flip(gray,1)
