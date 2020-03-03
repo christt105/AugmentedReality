@@ -1,7 +1,41 @@
 import cv2
 import numpy as np
 
+# solucion de profe
+
+def boxFilter(img):
+    #normalize
+    img = img / 255.0
+
+    # kernel
+    ksize = 3
+    krn = np.zeros((ksize, ksize))
+    krn[:, :] = 1.0 / (ksize * ksize)
+
+    # filter
+    filtered = convolve(img, krn)
+
+    return filtered
+
+def convolve(img, krn):
+    #kernel
+    ksize, _ = krn.shape
+    krad = int(ksize/2)
+
+    #frame
+    height, width, depth = img.shape
+    framed = np.ones((height + 2*krad, width + 2*krad, depth))
+    framed[krad:-krad, krad:-krad] = img
+    #filter
+    filtered = np.zeros(img.shape)
+    for i in range(0, height):
+        for j in range(0, width):
+            filtered[i, j] = (framed[i:i+ksize, j:j+ksize] * krn[:, :, np.newaxis]).sum(axis=(0, 1))
+    
+    return filtered
+
 img = cv2.imread('noise.png', 1)
+imgprofe = boxFilter(img)
 img = img/255
 
 kernel = np.ones((5, 5))/25
@@ -26,8 +60,10 @@ for i in range(1, rows - 1):
 
 cv2.imshow('Hollow Knight', img)
 cv2.imshow('Hollow filtered', imgf)
+cv2.imshow('Hollow filtered Profe', imgprofe)
 
 k = cv2.waitKey(0)
 
 if k == 27:
     cv2.destroyAllWindows()
+
