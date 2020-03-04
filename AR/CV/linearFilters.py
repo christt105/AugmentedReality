@@ -31,6 +31,9 @@ def convolve(img, krn):
     for i in range(0, height):
         for j in range(0, width):
             filtered[i, j] = (framed[i:i+ksize, j:j+ksize] * krn[:, :, np.newaxis]).sum(axis=(0, 1))
+          # filtered[i, j, 0] = (framed[i:i+ksize, j:j+ksize, 0] * krn)
+          # filtered[i, j, 1] = (framed[i:i+ksize, j:j+ksize, 1] * krn)
+          # filtered[i, j, 2] = (framed[i:i+ksize, j:j+ksize, 2] * krn)
     
     return filtered
 
