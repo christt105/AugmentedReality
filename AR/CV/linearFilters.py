@@ -37,7 +37,7 @@ def convolve(img, krn):
     
     return filtered
 
-img = cv2.imread('noise.png', 1)
+img = cv2.imread('HollowKnight_SobelBLUE.png', 1)
 imgprofe = boxFilter(img)
 img = img/255
 

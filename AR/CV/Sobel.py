@@ -41,14 +41,14 @@ def convolve(img, krn):
     
     return filtered
 
-img = cv2.imread('hk.png', 1)
+img = cv2.imread('hkblue.jpg', 1)
 #imgbw = cv2.imread('hk.png', 0)
 imgsobel = Sobel(img)
 # imgsobelbw = Sobel(imgbw)
 
 cv2.imshow('Hollow Knight Sobel', imgsobel)
-#cv2.imshow('Hollow Knight Sobel stylized', imgsobel/imgsobel.max())
-#cv2.imshow('Hollow Knight', img)
+cv2.imshow('Hollow Knight Sobel stylized', imgsobel/imgsobel.max())
+cv2.imshow('Hollow Knight', img)
 
 O = np.vstack([imgsobel, imgsobel/imgsobel.max()])
 
@@ -59,9 +59,9 @@ k = cv2.waitKey(0)
 #if k == 27:
 #    cv2.destroyAllWindows()
 if k == ord('s'):
-    cv2.imwrite('HollowKnight_Sobel.png', imgsobel*255.0)
-    cv2.imwrite('HollowKnight_Sobel_stylized.png', imgsobel/imgsobel.max()*255.0)
-    cv2.imwrite('Vertical.png', O*255.0)
+    cv2.imwrite('HollowKnight_SobelBLUE.png', imgsobel*255.0)
+    cv2.imwrite('HollowKnight_Sobel_stylizedBLUE.png', imgsobel/imgsobel.max()*255.0)
+    cv2.imwrite('VerticalBLUE.png', O*255.0)
     #cv2.imwrite('HollowKnight.png', img)
     #cv2.imwrite('HollowKnightOP.png', OP)
     #cv2.destroyAllWindows()
