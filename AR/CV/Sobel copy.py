@@ -32,6 +32,7 @@ def convolve(img, krn):
         framed = np.ones((height + 2*krad, width + 2*krad, depth))
         #filter
         filtered = np.zeros(img.shape)
+
         for i in range(0, height):
             for j in range(0, width):
                 filtered[i, j] = (framed[i:i+ksize, j:j+ksize] * krn[:, :, np.newaxis]).sum(axis=(0, 1))
@@ -46,7 +47,7 @@ def convolve(img, krn):
         filtered = np.zeros(img.shape)
         for i in range(0, height):
             for j in range(0, width):
-                filtered[i, j] = (framed[i:i+ksize, j:j+ksize] * krn[:, :]).sum(axis=(0, 1))
+                filtered[i, j] = (framed[i:i+ksize, j:j+ksize] * krn).sum(axis=(0, 1))
               # filtered[i, j, 0] = (framed[i:i+ksize, j:j+ksize, 0] * krn)
               # filtered[i, j, 1] = (framed[i:i+ksize, j:j+ksize, 1] * krn)
               # filtered[i, j, 2] = (framed[i:i+ksize, j:j+ksize, 2] * krn)
@@ -55,8 +56,8 @@ def convolve(img, krn):
 
 img = cv2.imread('hk.png', 1)
 imgbw = cv2.imread('hk.png', 0)
-imgsobelbw = Sobel(imgbw)
 imgsobel = Sobel(img)
+imgsobelbw = Sobel(imgbw)
 
 cv2.imshow('Hollow Knight Sobel', imgsobel)
 #cv2.imshow('Hollow Knight Sobel stylized', imgsobel/imgsobel.max())
@@ -65,7 +66,6 @@ cv2.imshow('Hollow Knight', img)
 cv2.imshow('Hollow Knight Sobel BW', imgsobelbw)
 cv2.imshow('Hollow Knight Sobel stylized BW', imgsobelbw/imgsobelbw.max())
 cv2.imshow('Hollow Knight BW', imgbw)
-
 
 k = cv2.waitKey(0)
 
