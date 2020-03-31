@@ -17,9 +17,10 @@ def gaussianKernel(krad):
 
 img = cv2.imread('noise.png', 0)
 
-krn = gaussianKernel(10)
+krn = gaussianKernel(2)
+krn = krn / krn.sum()
 
-cv2.imshow("kernel", krn*10000)
+cv2.imshow("kernel", krn)
 filtered = convolve(img, krn)
 cv2.imshow('gaussian', filtered)
 
