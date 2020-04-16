@@ -6,6 +6,7 @@ class Object {
         this.y = 0.0;
 
         this.rot = 0.0;
+        this.axis_rot = [0.0, 0.0, 1.0];
 
         this.mirror_h = false;
         this.mirror_v = false;
@@ -33,8 +34,9 @@ class Object {
         this.y = y;
     }
 
-    setRotation(rot) {
+    setRotation(rot, axis = [0.0, 0.0, 1.0]) {
         this.rot = rot;
+        this.axis_rot = axis;
     }
 
     setMirrorH(value) {
@@ -58,7 +60,7 @@ class Object {
         mat4.identity(mvMatrix);
         
         mat4.translate(mvMatrix, [this.x, this.y, -10.0]);
-        mat4.rotate(mvMatrix, 3.1415 * this.rot, [0.0, 0.0, 1.0]);
+        mat4.rotate(mvMatrix, 3.1415 * this.rot, this.axis_rot);
 
         if (this.mirror_h) {
             mat4.scale(mvMatrix, [-1.0, 1.0, 1.0]);
@@ -118,6 +120,40 @@ class Quad extends Object {
 
         this.size_v = 4;
         this.size_i = 2;
+
+        this.createBuffers();
+    }
+}
+
+class Cube extends Object {
+    constructor(width){
+        super("Cube");
+
+        this.width = width;
+
+        this.vertices = [
+            -width * 0.5, -width * 0.5, -width * 0.5,
+             width * 0.5, -width * 0.5, -width * 0.5,
+             width * 0.5,  width * 0.5, -width * 0.5,
+            -width * 0.5,  width * 0.5, -width * 0.5,
+
+            -width * 0.5, -width * 0.5,  width * 0.5,
+             width * 0.5, -width * 0.5,  width * 0.5,
+             width * 0.5,  width * 0.5,  width * 0.5,
+            -width * 0.5,  width * 0.5,  width * 0.5,
+        ]
+
+        this.indices = [
+            0, 1, 3, 3, 1, 2,
+            1, 5, 2, 2, 5, 6,
+            5, 4, 6, 6, 4, 7,
+            4, 0, 7, 7, 0, 3,
+            3, 2, 7, 7, 2, 6,
+            4, 5, 0, 0, 5, 1
+        ]
+
+        this.size_v = 8;
+        this.size_i = 12;
 
         this.createBuffers();
     }
