@@ -7,6 +7,7 @@
 
         <script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
         <script type="text/javascript" src="webgl-utils.js"></script>
+        <script type="text/javascript" src="Object.js"></script>
 
         <script id="shader-vs" type="x-shader/x-vertex">
             attribute vec3 aVertexPosition;
@@ -32,8 +33,7 @@
             // Global variables
             var gl;
             var shaderProgram;
-            var triangleVertexPositionBuffer;
-            var arr;
+            var objects;
 
 
             function initGL(canvas)
@@ -117,24 +117,21 @@
             
             function loadSceneOnGPU()
             {
-                arr = [Object("tri1"), Object("quad")];
-                arr[0].id_v = gl.createBuffer();
-                gl.bindBuffer(gl.ARRAY_BUFFER, arr[0].id_v);
-                arr[0].vertex = [
-                     0.0, 1.0, 0.0,
-                    -1.0, -1.0, 0.0,
-                     1.0, -1.0, 0.0
-                ];
-                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr[0].vertex), gl.STATIC_DRAW);
-                
-                arr[0].id_i = gl.createBuffer();
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, arr[0].id_i);
-                arr[0].index = [
-                    0,1,2
-                ];
-                arr[0].size_i = 3;
-                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(arr[0].index), gl.STATIC_DRAW);
-                arr[0].size_v = 3;
+                t1 = new Triangle(2, 1);
+                t1.setPosition(0.0, 1.25);
+
+                t2 = new Triangle(2, 1);
+                t2.setPosition(0.0, -1.25);
+                t2.setMirrorV(true);
+
+                q1 = new Quad(2);
+                q1.setPosition(-3, 0);
+                q1.setRotation(0.25);
+
+                q2 = new Quad(2);
+                q2.setPosition(3, 0);
+
+                objects = [t1, t2, q1, q2];
             }
 
 
@@ -147,23 +144,7 @@
                 gl.clearColor(0.0, 0.0, 0.0, 1.0);
                 gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
                 
-                gl.bindBuffer(gl.ARRAY_BUFFER, arr[0].id_v);
-                gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, arr[0].size_v, gl.FLOAT, false, 0, 0);
-                
-                alert(arr);
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, arr[0].id_i);
-
-                var pMatrix = mat4.create();
-                mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
-
-                var mvMatrix = mat4.create();
-                mat4.identity(mvMatrix);
-                mat4.translate(mvMatrix, [0.0, 0.0, -10.0]);
-
-                gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
-                gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
-
-                gl.drawElements(gl.TRIANGLES, arr[0].size_i, gl.UNSIGNED_SHORT, 0);
+                objects.forEach(element => element.draw());
             }
 
 
