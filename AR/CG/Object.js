@@ -13,14 +13,18 @@ class Object {
     }
 
     createBuffers() {
-        this.createVertexBuffer(this.vertices);
+        this.createVertexBuffer(this.vertices, this.colors);
         this.createIndexBuffer(this.indices);
     }
 
-    createVertexBuffer(vertices) {
+    createVertexBuffer(vertices, colors) {
         this.id_v = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.id_v);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+        this.id_c = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.id_c);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
     }
 
     createIndexBuffer(indices) {
@@ -51,6 +55,9 @@ class Object {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.id_v);
         gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
 
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.id_c);
+        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.id_i);
 
         var pMatrix = mat4.create();
@@ -58,7 +65,7 @@ class Object {
 
         var mvMatrix = mat4.create();
         mat4.identity(mvMatrix);
-        
+
         mat4.translate(mvMatrix, [this.x, this.y, -10.0]);
         mat4.rotate(mvMatrix, 3.1415 * this.rot, this.axis_rot);
 
@@ -89,11 +96,18 @@ class Triangle extends Object {
             width * 0.5, -width * 0.5, 0.0
         ]
 
+        this.colors = [
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0
+        ]
+
         this.indices = [
             0, 1, 2
         ]
 
         this.size_v = 3;
+        this.size_c = 3;
         this.size_i = 1;
 
         this.createBuffers();
@@ -101,16 +115,23 @@ class Triangle extends Object {
 }
 
 class Quad extends Object {
-    constructor(width){
+    constructor(width) {
         super("Quad");
 
         this.width = width;
 
         this.vertices = [
             -width * 0.5, -width * 0.5, 0.0,
-             width * 0.5, -width * 0.5, 0.0,
-             width * 0.5,  width * 0.5, 0.0,
-            -width * 0.5,  width * 0.5, 0.0
+            width * 0.5, -width * 0.5, 0.0,
+            width * 0.5, width * 0.5, 0.0,
+            -width * 0.5, width * 0.5, 0.0
+        ]
+
+        this.colors = [
+            1.0, 0.0, 0.0,
+            0.0, 0.0, 0.0,
+            0.0, 0.0, 1.0,
+            1.0, 1.0, 1.0
         ]
 
         this.indices = [
@@ -119,6 +140,7 @@ class Quad extends Object {
         ]
 
         this.size_v = 4;
+        this.size_c = 4;
         this.size_i = 2;
 
         this.createBuffers();
@@ -126,21 +148,21 @@ class Quad extends Object {
 }
 
 class Cube extends Object {
-    constructor(width){
+    constructor(width) {
         super("Cube");
 
         this.width = width;
 
         this.vertices = [
             -width * 0.5, -width * 0.5, -width * 0.5,
-             width * 0.5, -width * 0.5, -width * 0.5,
-             width * 0.5,  width * 0.5, -width * 0.5,
-            -width * 0.5,  width * 0.5, -width * 0.5,
+            width * 0.5, -width * 0.5, -width * 0.5,
+            width * 0.5, width * 0.5, -width * 0.5,
+            -width * 0.5, width * 0.5, -width * 0.5,
 
-            -width * 0.5, -width * 0.5,  width * 0.5,
-             width * 0.5, -width * 0.5,  width * 0.5,
-             width * 0.5,  width * 0.5,  width * 0.5,
-            -width * 0.5,  width * 0.5,  width * 0.5,
+            -width * 0.5, -width * 0.5, width * 0.5,
+            width * 0.5, -width * 0.5, width * 0.5,
+            width * 0.5, width * 0.5, width * 0.5,
+            -width * 0.5, width * 0.5, width * 0.5,
         ]
 
         this.indices = [

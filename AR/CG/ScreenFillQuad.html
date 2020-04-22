@@ -126,21 +126,10 @@
             
             function loadSceneOnGPU()
             {
-                t1 = new Triangle(2, 1);
-                t1.setPosition(0.0, 1.25);
-
-                t2 = new Triangle(2, 1);
-                t2.setPosition(0.0, -1.25);
-                t2.setMirrorV(true);
-
                 q1 = new Quad(2);
-                q1.setPosition(-3, 0);
-                q1.setRotation(0.25);
+                q1.setPosition(0, 0);
 
-                q2 = new Quad(2);
-                q2.setPosition(3, 0);
-
-                objects = [t1, t2, q1, q2];
+                objects = [q1];
             }
 
 
