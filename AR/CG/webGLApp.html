@@ -44,6 +44,10 @@
         var meshes;
         var objects;
 
+        var red = [1.0, 0.0, 0.0];
+        var green = [0.0, 1.0, 0.0];
+        var blue = [0.0, 0.0, 1.0];
+
 
         function initGL(canvas) {
             var canvas = document.getElementById("webGL-canvas");
@@ -123,24 +127,37 @@
             shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
         }
 
+        function fillArray(a1, a2, a3) {
+            return [a1[0], a1[1], a1[2],
+            a2[0], a2[1], a2[2],
+            a3[0], a3[1], a3[2],
+            ];
+        }
+
 
         function loadSceneOnGPU() {
+            var shd1 = fillArray(red, red, blue);
+            var shd2 = fillArray(blue, red, blue);
+            var shd3 = fillArray(blue, green, red);
+            var shd4 = fillArray(green, red, blue);
+            var shd5 = fillArray(green, blue, red);
+
             triangle = new Triangle(2, 1);
             quad = new Quad(2);
             meshes = [triangle, quad];
 
-            o1 = new Object(triangle);
+            o1 = new Object(triangle, shd2);
             o1.setPosition(0, 1.25);
 
-            o2 = new Object(triangle);
+            o2 = new Object(triangle, shd3);
             o2.setPosition(0, -1.25);
             o2.setRotation(45);
 
-            o3 = new Object(quad);
+            o3 = new Object(quad, shd4);
             o3.setPosition(-4, 0);
             o3.setRotation(0.20);
 
-            o4 = new Object(quad);
+            o4 = new Object(quad, shd1);
             o4.setPosition(4, 0);
 
             objects = [o1, o2, o3, o4];

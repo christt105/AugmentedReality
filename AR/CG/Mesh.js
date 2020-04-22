@@ -6,16 +6,13 @@ class Mesh {
     createBuffers() {
         this.createVertexBuffer(this.vertices, this.colors);
         this.createIndexBuffer(this.indices);
+        
     }
 
     createVertexBuffer(vertices, colors) {
         this.id_v = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.id_v);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-
-        this.id_c = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.id_c);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
     }
 
     createIndexBuffer(indices) {
@@ -27,10 +24,7 @@ class Mesh {
     bindBuffers() {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.id_v);
         gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
-    
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.id_c);
-        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
-    
+
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.id_i);
     }
 
@@ -47,15 +41,9 @@ class Triangle extends Mesh {
         this.height = height;
 
         this.vertices = [
-            0.0, height, 0.0,
-            -width * 0.5, -width * 0.5, 0.0,
-            width * 0.5, -width * 0.5, 0.0
-        ]
-
-        this.colors = [
-            1.0, 0.0, 0.0,
-            0.0, 1.0, 0.0,
-            0.0, 0.0, 1.0
+             0.0,           height,      0.0,
+            -width * 0.5,  -width * 0.5, 0.0,
+             width * 0.5,  -width * 0.5, 0.0
         ]
 
         this.indices = [
@@ -63,7 +51,6 @@ class Triangle extends Mesh {
         ]
 
         this.size_v = 3;
-        this.size_c = 3;
         this.size_i = 1;
 
         this.createBuffers();
@@ -78,16 +65,9 @@ class Quad extends Mesh {
 
         this.vertices = [
             -width * 0.5, -width * 0.5, 0.0,
-             width * 0.5, -width * 0.5, 0.0,
-             width * 0.5,  width * 0.5, 0.0,
-            -width * 0.5,  width * 0.5, 0.0
-        ]
-
-        this.colors = [
-            1.0, 0.0, 0.0,
-            0.0, 0.0, 0.0,
-            0.0, 0.0, 1.0,
-            1.0, 1.0, 1.0
+            width * 0.5, -width * 0.5, 0.0,
+            width * 0.5, width * 0.5, 0.0,
+            -width * 0.5, width * 0.5, 0.0
         ]
 
         this.indices = [
@@ -96,7 +76,6 @@ class Quad extends Mesh {
         ]
 
         this.size_v = 4;
-        this.size_c = 4;
         this.size_i = 2;
 
         this.createBuffers();
@@ -111,14 +90,14 @@ class Cube extends Mesh {
 
         this.vertices = [
             -width * 0.5, -width * 0.5, -width * 0.5,
-             width * 0.5, -width * 0.5, -width * 0.5,
-             width * 0.5,  width * 0.5, -width * 0.5,
-            -width * 0.5,  width * 0.5, -width * 0.5,
+            width * 0.5, -width * 0.5, -width * 0.5,
+            width * 0.5, width * 0.5, -width * 0.5,
+            -width * 0.5, width * 0.5, -width * 0.5,
 
             -width * 0.5, -width * 0.5, width * 0.5,
-             width * 0.5, -width * 0.5, width * 0.5,
-             width * 0.5,  width * 0.5, width * 0.5,
-            -width * 0.5,  width * 0.5, width * 0.5,
+            width * 0.5, -width * 0.5, width * 0.5,
+            width * 0.5, width * 0.5, width * 0.5,
+            -width * 0.5, width * 0.5, width * 0.5,
         ]
 
         this.indices = [
