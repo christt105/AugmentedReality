@@ -12,30 +12,58 @@
 
     <script id="shader-vs" type="x-shader/x-vertex">
         attribute vec3 aVertexPosition;
-            //attribute vec2 aTextureCoord;
+        attribute vec3 aVertexNormal;
 
-            uniform mat4 uMVMatrix;
-            uniform mat4 uPMatrix;
+        uniform mat4 uMVMatrix;
+        uniform mat4 uViewMatrix;
+        uniform mat4 uPMatrix;
+    
+        //uniform mat4 uModelMatrix;
+        //uniform mat4 uNormalMatrix;
 
-            //varying highp vec2 vTextureCoord;
+        varying vec3 vNormal;
+        varying vec3 vLightDir;
+        //varying vec3 vPosition;
 
-            void main(void) {
-                gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
-               // vTextureCoord = aTextureCoord;
-            }
-        </script>
+        void main(void) {
+            vec3 worldSpaceLightDir = vec3(-1.5, 2.0, 1.0);
+            vLightDir = mat3(uViewMatrix) * worldSpaceLightDir;
+
+            //vNormal = mat3(uViewMatrix) * uNormalMatrix * aVertexNormal;
+            vNormal = mat3(uMVMatrix) * aVertexNormal;
+            gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        }
+    </script>
 
     <script id="shader-fs" type="x-shader/x-fragment">
         precision mediump float;
 
-            //uniform sampler2D uSampler;
+        varying vec3 vNormal;
+        varying vec3 vLightDir;
 
-            //varying highp vec2 vTextureCoord;
+        void main(void) {
+            vec3 N = normalize(vNormal);
+            vec3 L = normalize(vLightDir);
 
-            void main(void) {
-                //gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-                gl_FragColor = vec4(1.0, 0.6, 0.0, 1.0);
-            }
+            vec3 totalColor = vec3(0.0);
+
+            //settings
+            vec3 albedo = vec3(1.0, 0.6, 0.0);
+            vec3 lightColor = vec3(1.0);
+
+            //ambient
+            totalColor += albedo *0.5;
+
+            //diffuse
+            float diffuseIntensity = max(0.0, dot(N, L));
+            totalColor += albedo * lightColor * diffuseIntensity;
+
+            //specular
+
+            gl_FragColor = vec4(1.0, 0.6, 0.0, 1.0);
+            gl_FragColor = vec4(N, 1.0);
+            gl_FragColor = vec4(totalColor, 1.0);
+        }
         </script>
 
     <script type="text/javascript">
@@ -92,8 +120,6 @@
             if (!gl) {
                 alert("Could not initialise WebGL, sorry :-(");
             }
-
-            //ResetCamera();
         }
 
         function initInput() {
@@ -173,34 +199,15 @@
             gl.useProgram(shaderProgram);
 
             shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
-            //shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
             gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
 
-            //gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute);
-            //gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, 2, gl.FLOAT, false, 0, 0);
+            shaderProgram.vertexNormalAttribute = gl.getAttribLocation(shaderProgram, "aVertexNormal");
+            gl.enableVertexAttribArray(shaderProgram.vertexNormalAttribute);
 
             shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
             shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+            shaderProgram.vMatrixUniform = gl.getUniformLocation(shaderProgram, "uViewMatrix");
         }
-
-        /*function loadTextureOnGPU() {
-            tex = gl.createTexture();
-            tex.image = new Image();
-            tex.image.onload = function () {
-                setTextureParams(tex);
-            }
-            tex.image.src = "marvel.png";
-        }
-
-        function setTextureParams(texture) {
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-            gl.generateMipmap(gl.TEXTURE_2D);
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }*/
 
         function handleLoadedModel(model, modelData) {
             model.NormalBuffer = gl.createBuffer();
@@ -243,20 +250,31 @@
 
         function initModels() {
             resources.laptop = loadModel("models/Laptop.json");
+            resources.teapot = loadModel("models/Teapot.json");
         }
 
         function initScene() {
             var entity = {};
             entity.transform = {};
-            entity.transform.position = [0.0, 0.0, 0.0];
+            entity.transform.position = [0.0, -0.75, 0.0];
             entity.transform.rotation = [-1.57079632679, 0.0, 0.0];
             entity.transform.scale = [1.5, 1.5, 1.5];
             entity.model = resources.laptop;
+            objects.push(entity);
+
+            entity = {};
+            entity.transform = {};
+            entity.transform.position = [4.0, 0.0, 0.0];
+            entity.transform.rotation = [0.0, 0.0, 0.0];
+            entity.transform.scale = [0.1, 0.1, 0.1];
+            entity.model = resources.teapot;
             objects.push(entity);
         }
 
         function Render() {
             gl.enable(gl.DEPTH_TEST);
+            //gl.enable(gl.CULL_FACE);
+            //gl.cullFace(gl.BACK);
 
             gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
 
@@ -273,6 +291,7 @@
             mat4.translate(viewMatrix, vec3.negate(cameraPositionCopy));
             mat4.rotate(viewMatrix, camera.pitch, [1.0, 0.0, 0.0]);
             mat4.rotate(viewMatrix, camera.yaw, [0.0, 1.0, 0.0]);
+            gl.uniformMatrix4fv(shaderProgram.vMatrixUniform, false, viewMatrix);
 
             for (var i = 0; i < objects.length; ++i) {
                 var o = objects[i];
@@ -280,6 +299,10 @@
 
                 gl.bindBuffer(gl.ARRAY_BUFFER, o.model.PositionBuffer);
                 gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, o.model.PositionBuffer.itemSize, gl.FLOAT,
+                    false, 0, 0);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, o.model.NormalBuffer);
+                gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, o.model.NormalBuffer.itemSize, gl.FLOAT,
                     false, 0, 0);
 
                 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, o.model.IndexBuffer);

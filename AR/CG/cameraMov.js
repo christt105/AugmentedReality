@@ -1,5 +1,5 @@
 function processInputEvents() {
-    var speed = 10;
+    var speed = 2;
     //W
     if (input.key[87] == ButtonState.PRESSED || input.key[87] == ButtonState.DOWN) {
         camera.position[2] -= speed * time.deltaSeconds;
