@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html>
+<style>
+    body {
+        position: fixed;
+    }
+</style>
+
+<head>
+    <title>Shadow Mapping</title>
+    <meta charset="utf-8">
+    <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+
+    <script type="text/javascript" src="Javascript/glMatrix-0.9.5.min.js"></script>
+    <script type="text/javascript" src="Javascript/webgl-utils.js"></script>
+    <script type="text/javascript" src="Javascript/Input.js"></script>
+    <script type="text/javascript" src="Javascript/mathFunctions.js"></script>
+    <script type="text/javascript" src="Javascript/ImportModel.js"></script>
+    <script type="text/javascript" src="Javascript/Material.js"></script>
+
+
+    <script id="light-vs" type="x-shader/x-vertex">
+        attribute vec3 aVertexPosition;
+            
+        uniform mat4 modelViewMatrixLight;
+        uniform mat4 projectionMatrixLight;  
+            
+        void main(void) {
+            gl_Position = projectionMatrixLight * modelViewMatrixLight * vec4(aVertexPosition, 1.0); 
+        }
+        </script>
+
+    <script id="light-fs" type="x-shader/x-fragment">
+        precision mediump float;
+        uniform vec3 color;
+        vec4 encodeFloat (float depth)
+        {
+            const vec4 bitShift = vec4(
+                256 * 256 * 256,
+                256 * 256,
+                256,
+                1.0
+            );
+            const vec4 bitMask = vec4(
+                0,
+                1.0 / 256.0,
+                1.0 / 256.0,
+                1.0 / 256.0
+            );
+
+            vec4 comp = fract(depth * bitShift);
+            comp -= comp.xxyz * bitMask;
+            return comp;
+        }
+
+        void main(void)
+        {
+            gl_FragColor = encodeFloat(gl_FragCoord.z);
+        }
+        </script>
+
+    <script id="shader-vs" type="x-shader/x-vertex">
+        attribute vec3 aVertexPosition;
+        attribute vec3 aVertexNormal;
+
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
+        uniform mat4 uVMatrix;
+        uniform mat3 uNMatrix;
+
+        //Light matrices
+        uniform mat4 modelViewMatrixLight;
+        uniform mat4 projectionMatrixLight;
+
+        uniform vec3 uLightSourcePosition;
+
+        varying vec3 vertNormalEye;
+        varying vec4 vertPositionEye;
+        varying vec4 lightSourcePositionEye;
+        varying vec4 positionProjectedLightspace;
+
+
+        void main(void) {
+            vertPositionEye = uMVMatrix * vec4(aVertexPosition, 1.0);
+            gl_Position = uPMatrix * vertPositionEye;
+            vertNormalEye = uNMatrix * normalize(aVertexNormal);
+            lightSourcePositionEye = uVMatrix * vec4(uLightSourcePosition, 1.0);
+            positionProjectedLightspace = projectionMatrixLight * modelViewMatrixLight * vec4(aVertexPosition, 1.0);                
+        }
+        </script>
+
+    <script id="shader-fs" type="x-shader/x-fragment">
+        precision mediump float;
+
+        uniform vec3 Ia, Is, Id;
+        uniform vec3 Ka, Ks, Kd;
+        uniform float s;
+
+        uniform sampler2D lightDepth;
+
+        varying vec3 vertNormalEye;
+        varying vec4 vertPositionEye;
+        varying vec4 lightSourcePositionEye;
+
+        varying vec4 positionProjectedLightspace;
+
+        float decodeFloat(vec4 color)
+        {
+            const vec4 bitShift = vec4(
+                1.0 / (256.0 * 256.0 * 256.0),
+                1.0 / (256.0 * 256.0),
+                1.0 / 256.0,
+                1
+            );
+            return dot(color, bitShift);
+        }
+
+        void main(void) {
+            //Phong
+            vec3 L = normalize(lightSourcePositionEye.xyz - vertPositionEye.xyz);
+            vec3 N = normalize(vertNormalEye);
+            float dotNL = max(dot(N,L), 0.0);
+
+            vec3 V = normalize(-vertPositionEye.xyz);
+            vec3 R = reflect(-L,N);
+            float dotRVs = pow(max(dot(R,V), 0.0), s);
+
+            vec3 ambient = Ka * Ia;
+            vec3 diffuse = Kd * Id * dotNL;
+            vec3 specular = Ks * Is * dotRVs;
+
+            // Shadows
+            vec3 positionTextureLightSpace = 0.5 * positionProjectedLightspace.xyz / positionProjectedLightspace.w + vec3(0.5);
+
+            float depthFromLightTexture = decodeFloat(texture2D(lightDepth, positionTextureLightSpace.xy));
+
+            float lightFactor = 0.0;
+            if(depthFromLightTexture + 0.001 > positionTextureLightSpace.z)
+            {
+                lightFactor = 1.0;
+            }
+
+            vec3 shadedColor = ambient + (diffuse + specular) * lightFactor;
+            gl_FragColor = vec4(shadedColor, 1.0);
+        }
+        </script>
+    <script>
+        class Object {
+            constructor(position, rotation, scale, model, material) {
+                this.position = position;
+                this.scale = scale;
+                this.rotation = rotation;
+                this.model = model;
+                this.matrix = mat4.create();
+                mat4.identity(this.matrix);
+                mat4.translate(this.matrix, position);
+                mat4.rotate(this.matrix, deg2Rad(rotation[0]), [1, 0, 0]);
+                mat4.rotate(this.matrix, deg2Rad(rotation[1]), [0, 1, 0]);
+                mat4.rotate(this.matrix, deg2Rad(rotation[2]), [0, 0, 1]);
+                mat4.scale(this.matrix, scale);
+                this.material = material;
+            }
+            rotate(axis, angle) {
+                this.matrix = mat4.rotate(this.matrix, deg2Rad(angle), axis);
+            }
+        }
+
+        // Global variables
+        var gl;
+        var shaderProgram;
+        var programLight;
+
+        var arm = {};
+
+        class Camera {
+            constructor(position, yaw, pitch, zNear, zFar) {
+                this.position = position;
+                this.yaw = yaw;
+                this.pitch = pitch;
+                this.zNear = zNear;
+                this.zFar = zFar;
+            }
+        }
+
+        var selectedCamera = 0;
+
+        var cameras = [
+            new Camera([0.0, -2.0, 10.0], 0, 0, 0.1, 20),
+            new Camera([0.0, -2.0, 10.0], 3.1415 * 0.5, 0, 0.1, 20),
+            new Camera([0.0, -2.0, 10.0], 3.1415, 0, 0.1, 20),
+            new Camera([0.0, -2.0, 10.0], 3.1415 * 1.5, 0, 0.1, 20)
+        ];
+
+        var time = {
+            deltaSeconds: 0.0,
+            lastTimeMillis: 0.0,
+        };
+
+        var Objects = [];
+        var resources = [];
+
+        var rttFramebuffer;
+        var rttTexture;
+
+        var pMatrixLight = mat4.create();
+        var mvMatrixLight = mat4.create();
+
+        //Light variables
+        var lightPos = [10.0, 20.0, 10.0];
+
+        var mvMatrix = mat4.create();
+        var pMatrix = mat4.create();
+
+        function initGL() {
+            var canvas = document.getElementById("webGL-canvas");
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            try {
+                gl = canvas.getContext("experimental-webgl");
+                gl.viewportWidth = canvas.width;
+                gl.viewportHeight = canvas.height;
+            } catch (e) {}
+            if (!gl) {
+                alert("Could not initialise WebGL, sorry :-(");
+            }
+        }
+
+        function InitTime() {
+            var d = new Date();
+            time.lastTimeMillis = d.getTime();
+        }
+
+        function InitTextureFramebuffer() {
+            rttFramebuffer = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
+            rttFramebuffer.width = 2048;
+            rttFramebuffer.height = 2048;
+
+            rttTexture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, rttTexture);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl
+                .UNSIGNED_BYTE, null);
+
+            var renderbuffer = gl.createRenderbuffer();
+            gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+            gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, rttFramebuffer.width, rttFramebuffer.height);
+
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, rttTexture, 0);
+            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
+
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        }
+
+        function getShader(id) {
+            var shaderScript = document.getElementById(id);
+            if (!shaderScript) {
+                return null;
+            }
+
+            var str = "";
+            var k = shaderScript.firstChild;
+            while (k) {
+                if (k.nodeType == 3) {
+                    str += k.textContent;
+                }
+                k = k.nextSibling;
+            }
+
+            var shader;
+            if (shaderScript.type == "x-shader/x-fragment") {
+                shader = gl.createShader(gl.FRAGMENT_SHADER);
+            } else if (shaderScript.type == "x-shader/x-vertex") {
+                shader = gl.createShader(gl.VERTEX_SHADER);
+            } else {
+                return null;
+            }
+
+            gl.shaderSource(shader, str);
+            gl.compileShader(shader);
+
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                alert(gl.getShaderInfoLog(shader));
+                return null;
+            }
+
+            return shader;
+        }
+
+
+        function initShaders() {
+            var fragmentShader = getShader("shader-fs");
+            var vertexShader = getShader("shader-vs");
+
+            shaderProgram = gl.createProgram();
+            gl.attachShader(shaderProgram, vertexShader);
+            gl.attachShader(shaderProgram, fragmentShader);
+            gl.linkProgram(shaderProgram);
+
+            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                alert("Could not initialise shaders");
+            }
+
+            gl.useProgram(shaderProgram);
+
+            shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+            // gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+            shaderProgram.normalPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexNormal");
+            //gl.enableVertexAttribArray(shaderProgram.normalPositionAttribute);
+
+
+
+            // Matrices ====================
+            shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+            shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+            shaderProgram.nMatrixUniform = gl.getUniformLocation(shaderProgram, "uNMatrix");
+            shaderProgram.vMatrixUniform = gl.getUniformLocation(shaderProgram, "uVMatrix");
+
+            shaderProgram.pMatrixLight_Uniform = gl.getUniformLocation(shaderProgram, "projectionMatrixLight");
+            shaderProgram.mvMatrixLight_Uniform = gl.getUniformLocation(shaderProgram, "modelViewMatrixLight");
+
+            shaderProgram.L_Uniform = gl.getUniformLocation(shaderProgram, "L");
+            shaderProgram.Ia_Uniform = gl.getUniformLocation(shaderProgram, "Ia");
+            shaderProgram.Is_Uniform = gl.getUniformLocation(shaderProgram, "Is");
+            shaderProgram.Id_Uniform = gl.getUniformLocation(shaderProgram, "Id");
+
+            shaderProgram.Ka_Uniform = gl.getUniformLocation(shaderProgram, "Ka");
+            shaderProgram.Ks_Uniform = gl.getUniformLocation(shaderProgram, "Ks");
+            shaderProgram.Kd_Uniform = gl.getUniformLocation(shaderProgram, "Kd");
+
+            shaderProgram.s_Uniform = gl.getUniformLocation(shaderProgram, "s");
+
+            shaderProgram.Ip_Uniform = gl.getUniformLocation(shaderProgram, "Ip");
+            shaderProgram.LightPos = gl.getUniformLocation(shaderProgram, "uLightSourcePosition");
+            shaderProgram.lightDepthUniform = gl.getUniformLocation(shaderProgram, "lightDepth");
+
+
+
+            // Light Shader ==========================================================================
+            var vertexShader = getShader("light-vs");
+            var fragmentShader = getShader("light-fs");
+
+            programLight = gl.createProgram();
+            gl.attachShader(programLight, vertexShader);
+            gl.attachShader(programLight, fragmentShader);
+            gl.linkProgram(programLight);
+
+            if (!gl.getProgramParameter(programLight, gl.LINK_STATUS)) {
+                alert("Could not initialise shaders");
+            }
+
+            /* ! Don't know if this is necesary */
+            gl.useProgram(programLight);
+
+            programLight.vertexPositionAttribute = gl.getAttribLocation(programLight, "aVertexPosition");
+            //gl.enableVertexAttribArray(programLight.vertexPositionAttribute);
+
+            programLight.pMatrixLight_Uniform = gl.getUniformLocation(programLight, "projectionMatrixLight");
+            programLight.mvMatrixLight_Uniform = gl.getUniformLocation(programLight, "modelViewMatrixLight");
+            programLight.color_Uniform = gl.getUniformLocation(programLight, "color");
+
+        }
+
+        function loadSceneOnGPU() {
+            resources.cone = loadModel("Cone");
+            resources.cube = loadModel("Cube");
+            resources.cylinder = loadModel("Cylinder");
+            resources.plane = loadModel("Plane");
+            resources.sphere = loadModel("Sphere");
+
+            var material = {};
+            material.yellow = new Material([1.0, 0.6, 0.0], [1.0, 1.0, 1.0], [0.5, 0.5, 0.5]);
+            material.black = new Material([0.0, 0.0, 0.0], [0, 0, 0], [0.5, 0.5, 0.5]);
+            material.red = new Material([1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.5, 0.5, 0.5]);
+            material.redball = new Material([1.0, 0.0, 0.0], [1.0, 1.0, 1.0], [0.5, 0.5, 0.5]);
+            material.brown = new Material([0.8, 0.52, 0.247], [1.0, 1.0, 1.0], [0.5, 0.5, 0.5]);
+            material.white = new Material([1.0, 1.0, 1.0], [0.0, 0.0, 0.0], [0.5, 0.5, 0.5]);
+            material.pink = new Material([0.835, 0.576, 0.8588], [0.0, 0.0, 0.0], [0.5, 0.5, 0.5]);
+
+            Objects.push(new Object([0, -1, 0], [0, 0, 0], [1, 1, 1], resources.plane, material.black)); //floor
+
+            //PIKACHU head
+            Objects.push(new Object([0, 1, 0], [0, 0, 0], [0.5, 0.5, 0.5], resources.sphere, material.yellow)); //head
+            Objects.push(new Object([0.3, 0.9, 0.3], [0, 0, 0], [0.12, 0.12, 0.12], resources.sphere, material.red));
+            Objects.push(new Object([-0.3, 0.9, 0.3], [0, 0, 0], [0.12, 0.12, 0.12], resources.sphere, material.red));
+            Objects.push(new Object([0.0, 0.9, 0.45], [0, 0, 0], [0.05, 0.05, 0.05], resources.sphere, material.black));
+            Objects.push(new Object([0.2, 1.1, 0.45], [0, 20, 0], [0.05, 0.05, 0.025], resources.sphere, material
+                .black));
+            Objects.push(new Object([-0.2, 1.1, 0.45], [0, -20, 0], [0.05, 0.05, 0.025], resources.sphere, material
+                .black));
+
+            //ears
+            Objects.push(new Object([-0.5, 1.7, 0.0], [0, 0, 30], [0.25, 0.5, 0.25], resources.cone, material.yellow));
+            Objects.push(new Object([0.5, 1.7, 0.0], [0, 0, -30], [0.25, 0.5, 0.25], resources.cone, material.yellow));
+            Objects.push(new Object([-0.68, 2, 0.0], [0, 0, 30], [0.125, 0.25, 0.125], resources.cone, material.black));
+            Objects.push(new Object([0.68, 2, 0.0], [0, 0, -30], [0.125, 0.25, 0.125], resources.cone, material.black));
+
+            //body
+            Objects.push(new Object([0, 0.1, 0], [0, 0, 0], [0.5, 0.5, 0.5], resources.sphere, material.yellow)); //body
+            Objects.push(new Object([0.2, -0.1, 0], [0, 0, 0], [0.3, 0.3, 0.3], resources.sphere, material
+                .yellow)); //body
+            Objects.push(new Object([-0.2, -0.1, 0], [0, 0, 0], [0.3, 0.3, 0.3], resources.sphere, material
+                .yellow)); //body
+
+            //arms
+            Objects.push(new Object([0.4, 0.23, 0], [0, 0, 45], [0.25, 0.25, 0.25], resources.cylinder, material
+                .yellow)); // its left arm
+            arm = new Object([-0.4, 0.23, 0], [0, 0, -45], [0.25, 0.25, 0.25], resources.cylinder, material.yellow);
+            Objects.push(arm); // right
+
+            //foot
+            Objects.push(new Object([0.3, -0.4, 0.1], [0, 0, 0], [0.1, 0.05, 0.2], resources.sphere, material.yellow));
+            Objects.push(new Object([-0.3, -0.4, 0.1], [0, 0, 0], [0.1, 0.05, 0.2], resources.sphere, material.yellow));
+
+            //tail
+            Objects.push(new Object([0.0, -0.1, -0.5], [-60, 0, 0], [0.25, 0.25, 0.25], resources.cylinder, material
+                .brown));
+            Objects.push(new Object([0.0, -0.1, -0.8], [60, 0, 0], [0.25, 0.25, 0.25], resources.cylinder, material
+                .yellow));
+            Objects.push(new Object([0.0, 0.1, -1.2], [-30, 0, 0], [0.25, 0.5, 0.25], resources.cylinder, material
+                .yellow));
+
+            //pokeball
+            Objects.push(new Object([0.0, 0.025, 1.0], [-60, 0, 0], [0.25, 0.25, 0.25], resources.sphere, material
+                .redball));
+            Objects.push(new Object([0.0, 0.0, 1.0], [-60, 0, 0], [0.25, 0.25, 0.25], resources.sphere, material
+                .white));
+            Objects.push(new Object([0.0, 0.0, 1.0], [0, 0, 0], [0.51, 0.02, 0.51], resources.cylinder, material
+                .black));
+            Objects.push(new Object([0.0, 0.0, 1.25], [90, 0, 0], [0.15, 0.02, 0.15], resources.cylinder, material
+                .black));
+            Objects.push(new Object([0.0, 0.0, 1.26], [90, 0, 0], [0.1, 0.02, 0.1], resources.cylinder, material
+                .white));
+        }
+
+        function StartVariables() {
+            //Matrices ========================================
+
+            mat4.ortho(-5.0, 5.0, -5.0, 5.0, 0.0, 30.0, pMatrixLight);
+
+            mat4.identity(mvMatrixLight);
+            mat4.lookAt(lightPos, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0], mvMatrixLight);
+        }
+
+
+
+        function drawSceneFromLight() {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
+
+            gl.viewport(0, 0, rttFramebuffer.width, rttFramebuffer.height);
+            gl.enable(gl.DEPTH_TEST);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            gl.useProgram(programLight);
+            gl.enableVertexAttribArray(programLight.vertexPositionAttribute);
+
+            Objects.forEach(obj => {
+                m = obj.model;
+                if (m.vertexBuffer) {
+                    mvLightPushMatrix();
+
+                    mat4.multiply(mvMatrixLight, obj.matrix, mvMatrixLight);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, m.vertexBuffer);
+                    gl.vertexAttribPointer(programLight.vertexPositionAttribute, m.vertexBuffer
+                        .itemSize, gl.FLOAT, false, 0, 0);
+
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.indexBuffer);
+
+                    sendMatricesToLightShader();
+
+                    gl.drawElements(gl.TRIANGLES, m.indexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+
+                    mvLightPopMatrix();
+                }
+
+            });
+
+            gl.disableVertexAttribArray(programLight.vertexPositionAttribute);
+            gl.useProgram(null);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        }
+
+        function sendMatricesToLightShader() {
+            // ModelView
+            gl.uniformMatrix4fv(programLight.mvMatrixLight_Uniform, false, mvMatrixLight);
+            gl.uniformMatrix4fv(programLight.pMatrixLight_Uniform, false, pMatrixLight);
+        }
+
+        var mvLightMatrixStack = [];
+
+        function mvLightPushMatrix() {
+            var copy = mat4.create();
+            mat4.set(mvMatrixLight, copy);
+            mvLightMatrixStack.push(copy);
+        }
+
+        function mvLightPopMatrix() {
+            if (mvLightMatrixStack.length == 0) {
+                throw "Invalid popMatrix!";
+            }
+            mvMatrixLight = mvLightMatrixStack.pop();
+        }
+
+        function drawSceneFromCamera() {
+
+            //Start
+            gl.enable(gl.DEPTH_TEST);
+
+            gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+
+            gl.clearColor(0.2, 0.2, 0.2, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            gl.useProgram(shaderProgram);
+            gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+            gl.enableVertexAttribArray(shaderProgram.normalPositionAttribute)
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, rttTexture);
+            gl.uniform1i(shaderProgram.lightDepthUniform, 0);
+
+            var lightingDirection = [0.0, 1.0, 0.5];
+            var normalized_L = vec3.create();
+            vec3.normalize(lightingDirection, normalized_L);
+            gl.uniform3fv(shaderProgram.L_Uniform, normalized_L);
+            gl.uniform3fv(shaderProgram.LightPos, lightPos);
+            //Light
+            //Light color
+            gl.uniform3f(shaderProgram.Ia_Uniform, 0.9, 0.9, 0.9);
+            gl.uniform3f(shaderProgram.Is_Uniform, 0.5, 0.5, 0.5);
+            gl.uniform3f(shaderProgram.Id_Uniform, 0.8, 0.8, 0.8);
+
+            //Other
+            gl.uniform1f(shaderProgram.s_Uniform, 40);
+            gl.uniform3f(shaderProgram.ligthPosition, -10.0, 20.0, 10.0);
+
+            mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, cameras[selectedCamera].zNear, cameras[
+                selectedCamera].zFar, pMatrix);
+            gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
+
+            mat4.identity(mvMatrix);
+            mat4.translate(mvMatrix, [cameras[selectedCamera].position[0], cameras[selectedCamera].position[1], -
+                cameras[selectedCamera].position[2]
+            ]);
+            mat4.rotate(mvMatrix, cameras[selectedCamera].pitch, [1.0, 0.0, 0.0]);
+            mat4.rotate(mvMatrix, cameras[selectedCamera].yaw, [0.0, 1.0, 0.0]);
+            gl.uniformMatrix4fv(shaderProgram.vMatrixUniform, false, mvMatrix);
+
+
+            Objects.forEach(obj => {
+                m = obj.model;
+                gl.uniformMatrix4fv(shaderProgram.vMatrixUniform, false, mvMatrix);
+                if (m.vertexBuffer) {
+                    mvPushMatrix();
+                    mvLightPushMatrix();
+
+                    //Material color
+                    gl.uniform3f(shaderProgram.Ka_Uniform, obj.material.Ka[0], obj.material.Ka[1], obj.material
+                        .Ka[2]);
+                    gl.uniform3f(shaderProgram.Ks_Uniform, obj.material.Ks[0], obj.material.Ks[1], obj.material
+                        .Ks[2]);
+                    gl.uniform3f(shaderProgram.Kd_Uniform, obj.material.Kd[0], obj.material.Kd[1], obj.material
+                        .Kd[2]);
+
+                    mat4.multiply(mvMatrix, obj.matrix, mvMatrix);
+                    mat4.multiply(mvMatrixLight, obj.matrix, mvMatrixLight);
+                    // mat4.inverse(mvMatrixLight);
+                    // Vertices
+                    gl.bindBuffer(gl.ARRAY_BUFFER, m.vertexBuffer);
+                    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, m.vertexBuffer
+                        .itemSize, gl.FLOAT, false, 0, 0);
+
+                    //Normales
+                    gl.bindBuffer(gl.ARRAY_BUFFER, m.normalBuffer);
+                    gl.vertexAttribPointer(shaderProgram.normalPositionAttribute, m.normalBuffer
+                        .itemSize, gl.FLOAT, false, 0, 0);
+
+                    // indices
+                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.indexBuffer);
+
+                    sendMatricesToShader();
+                    gl.drawElements(gl.TRIANGLES, m.indexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+
+                    mvPopMatrix();
+                    mvLightPopMatrix();
+                }
+            });
+
+            gl.disableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+            gl.disableVertexAttribArray(shaderProgram.normalPositionAttribute);
+
+        }
+
+        function sendMatricesToShader() {
+            // ModelView
+            gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+
+            // Normals
+            var normalMatrix = mat3.create();
+            mat4.toInverseMat3(mvMatrix, normalMatrix);
+            mat3.transpose(normalMatrix);
+            gl.uniformMatrix3fv(shaderProgram.nMatrixUniform, false, normalMatrix);
+
+            //Light matrices
+            gl.uniformMatrix4fv(shaderProgram.mvMatrixLight_Uniform, false, mvMatrixLight);
+            gl.uniformMatrix4fv(shaderProgram.pMatrixLight_Uniform, false, pMatrixLight);
+        }
+
+        var mvMatrixStack = [];
+
+        function mvPushMatrix() {
+            var copy = mat4.create();
+            mat4.set(mvMatrix, copy);
+            mvMatrixStack.push(copy);
+        }
+
+        function mvPopMatrix() {
+            if (mvMatrixStack.length == 0) {
+                throw "Invalid popMatrix!";
+            }
+            mvMatrix = mvMatrixStack.pop();
+        }
+
+        var angle = -45;
+        var up = true;
+
+        function normalizeAngle(ang) {
+            var newAngle = ang;
+            while (newAngle <= -180) newAngle += 360;
+            while (newAngle > 180) newAngle -= 360;
+            return newAngle;
+        }
+
+        function rotateArm() {
+            var speed = 5.0;
+            angle = normalizeAngle(angle);
+            if (up) {
+                angle -= speed * time.deltaSeconds;
+                arm.rotate([0, 0, 1], -speed * time.deltaSeconds);
+
+                if (angle <= -100)
+                    up = false;
+            } else {
+                angle += speed * time.deltaSeconds;
+                arm.rotate([0, 0, 1], speed * time.deltaSeconds);
+                if (angle >= -45)
+                    up = true;
+            }
+        }
+
+        function renderingLoop() {
+            var d = new Date();
+            var TimeMillis = d.getTime();
+            time.deltaSeconds = (TimeMillis - time.lastTimeMillis) / 100
+            time.lastTimeMillis = TimeMillis;
+
+            requestAnimFrame(renderingLoop);
+            var syntheticEvent = new WheelEvent("syntheticWheel", {
+                "deltaX": 4,
+                "deltaMode": 0
+            });
+
+            rotateArm();
+
+            processInputEvents();
+            drawSceneFromLight();
+            drawSceneFromCamera();
+            UpdateInput();
+        }
+
+        function webGLStart() {
+            initGL();
+            InitInput();
+            initShaders();
+            InitTextureFramebuffer();
+            loadSceneOnGPU();
+            InitTime();
+            StartVariables();
+            renderingLoop();
+
+        }
+    </script>
+
+</head>
+
+<body onload="webGLStart();" onresize="webGLStart();">
+
+    <canvas id="webGL-canvas" style="border: none; width:100%; height:100%; margin: 0 auto;"></canvas>
+</body>
+
+</html>

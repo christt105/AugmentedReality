@@ -17,6 +17,7 @@
         uniform mat4 uMVMatrix;
         uniform mat4 uViewMatrix;
         uniform mat4 uPMatrix;
+        uniform mat4 projectionMatrixLight;
     
         //uniform mat4 uModelMatrix;
         //uniform mat4 uNormalMatrix;
@@ -25,6 +26,8 @@
         varying vec3 vLightDir;
         //varying vec3 vPosition;
 
+        varying vec4 positionProjectedLightspace;
+
         void main(void) {
             vec3 worldSpaceLightDir = vec3(-1.5, 2.0, 1.0);
             vLightDir = mat3(uViewMatrix) * worldSpaceLightDir;
@@ -32,6 +35,8 @@
             //vNormal = mat3(uViewMatrix) * uNormalMatrix * aVertexNormal;
             vNormal = mat3(uMVMatrix) * aVertexNormal;
             gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+
+            positionProjectedLightspace = projectionMatrixLight * vec4(aVertexPosition, 1.0);
         }
     </script>
 
@@ -40,6 +45,20 @@
 
         varying vec3 vNormal;
         varying vec3 vLightDir;
+
+        uniform sampler2D lightDepth;
+
+        varying vec4 positionProjectedLightspace;
+
+        float decodeFloat (vec4 color) {
+            const vec4 bitShift = vec4(
+                1.0 / (256.0 * 256.0 * 256.0),
+                1.0 / (256.0 * 256.0),
+                1.0 / 256.0,
+                1
+            );
+            return dot(color, bitShift);
+        }
 
         void main(void) {
             vec3 N = normalize(vNormal);
@@ -60,17 +79,63 @@
 
             //specular
 
-            gl_FragColor = vec4(1.0, 0.6, 0.0, 1.0);
-            gl_FragColor = vec4(N, 1.0);
+            //gl_FragColor = vec4(1.0, 0.6, 0.0, 1.0);
+            //gl_FragColor = vec4(N, 1.0);
             gl_FragColor = vec4(totalColor, 1.0);
+
+            //Shadow
+            vec3 positionTextureLightspace = 0.5 * positionProjectedLightspace.xyz / positionProjectedLightspace.w + vec3(0.5);
+
+            float depthFromLightTexture = decodeFloat(texture2D(lightDepth, positionTextureLightspace.xy));
+
+            float lightFactor = 0.0;
+            if(depthFromLightTexture + 0.001 < positionTextureLightspace.z) {
+                lightFactor = 1.0;
+            }
+
+            vec3 shadedColor = totalColor * lightFactor;
+
+            gl_FragColor = vec4(shadedColor, 1.0);
         }
         </script>
+
+    <script id="light-vs" type="x-shader/x-vertex">
+        attribute vec3 aVertexPosition;
+
+        uniform mat4 modelViewMatrixLight;
+        uniform mat4 projectionMatrixLight;
+
+        void main(void) {
+            gl_Position = projectionMatrixLight * modelViewMatrixLight * vec4(aVertexPosition, 1.0);
+        }
+    </script>
+
+    <script id="light-fs" type="x-shader/x-fragment">
+        precision mediump float;
+
+        vec4 encodeFloat (float depth) {
+            const vec4 bitShift = vec4(256 * 256 * 256, 256 * 256, 256, 1.0);
+            const vec4 bitMask = vec4(0, 1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0);
+
+            vec4 comp = fract(depth * bitShift);
+            comp -= comp.xxyz * bitMask;
+            return comp;
+        }
+
+        void main(void) {
+            gl_FragColor = encodeFloat(gl_FragCoord.z);
+        }
+    </script>
 
     <script type="text/javascript">
         // Global variables
         var gl;
+
         var shaderProgram;
-        //var tex;
+        var shaderLight;
+
+        var rttFramebuffer;
+        var rttTexture;
 
         var resources = {};
         var objects = [];
@@ -143,6 +208,31 @@
             time.lastTimeMillis = d.getTime();
         }
 
+        function initFramebuffer() {
+            rttFramebuffer = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
+            rttFramebuffer.width = 2048;
+            rttFramebuffer.height = 2048;
+
+            rttTexture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, rttTexture);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl
+                .UNSIGNED_BYTE, null);
+
+            var renderbuffer = gl.createRenderbuffer();
+            gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+            gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, rttFramebuffer.width, rttFramebuffer.height);
+
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, rttTexture, 0);
+            gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
+
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
+
         function getShader(id) {
             var shaderScript = document.getElementById(id);
             if (!shaderScript) {
@@ -207,6 +297,28 @@
             shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
             shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
             shaderProgram.vMatrixUniform = gl.getUniformLocation(shaderProgram, "uViewMatrix");
+
+            // LIGHT SHADER =======================================================================================
+            var fragmentShader = getShader("light-fs");
+            var vertexShader   = getShader("light-vs");
+
+            shaderLight = gl.createProgram();
+            gl.attachShader(shaderLight, vertexShader);
+            gl.attachShader(shaderLight, fragmentShader);
+            gl.linkProgram(shaderLight);
+
+            if (!gl.getProgramParameter(shaderLight, gl.LINK_STATUS)) {
+                alert("Could not initialise shaders");
+            }
+
+            gl.useProgram(shaderLight);
+
+            shaderLight.vertexPositionAttribute = gl.getAttribLocation(shaderLight, "aVertexPosition");
+            gl.enableVertexAttribArray(shaderLight.vertexPositionAttribute);
+
+            shaderLight.pMatrixUniform  = gl.getUniformLocation(shaderLight, "uPMatrix");
+            shaderLight.mvMatrixUniform = gl.getUniformLocation(shaderLight, "uMVMatrix");
+            shaderLight.vMatrixUniform  = gl.getUniformLocation(shaderLight, "uViewMatrix");
         }
 
         function handleLoadedModel(model, modelData) {
@@ -251,6 +363,7 @@
         function initModels() {
             resources.laptop = loadModel("models/Laptop.json");
             resources.teapot = loadModel("models/Teapot.json");
+            resources.floor = loadModel("models/Floor.json");
         }
 
         function initScene() {
@@ -269,12 +382,22 @@
             entity.transform.scale = [0.1, 0.1, 0.1];
             entity.model = resources.teapot;
             objects.push(entity);
+
+            entity = {};
+            entity.transform = {};
+            entity.transform.position = [1.0, -2.0, 0.0];
+            entity.transform.rotation = [0.0, 0.0, 0.0];
+            entity.transform.scale = [20.0, 1.0, 20.0];
+            entity.model = resources.floor;
+            objects.push(entity);
         }
 
         function Render() {
+            gl.useProgram(shaderProgram);
+
+            //gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
             gl.enable(gl.DEPTH_TEST);
-            //gl.enable(gl.CULL_FACE);
-            //gl.cullFace(gl.BACK);
 
             gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
 
@@ -322,6 +445,23 @@
             }
         }
 
+        function RenderFromLight() {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
+
+            gl.viewport(0, 0, rttFramebuffer.width, rttFramebuffer.height);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            gl.useProgram(shaderLight);
+
+            gl.enableVertexAttribArray(shaderLight.vertexPositionAttribute);
+
+
+
+            //gl.disableVertexAttribArray(shaderLight.vertexPositionAttribute);
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
+
         function renderingLoop() {
             var d = new Date();
             var TimeMillis = d.getTime();
@@ -335,8 +475,10 @@
             });
 
             processInputEvents();
-            Render();
             UpdateInput();
+
+            RenderFromLight();
+            Render();
         }
 
         function webGLStart() {
@@ -344,6 +486,7 @@
             initTime();
             initInput();
             initShaders();
+            initFramebuffer();
 
             initModels();
             initScene();
